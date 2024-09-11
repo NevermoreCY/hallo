@@ -275,6 +275,7 @@ class ImageProcessorForDataProcessing():
         """
         # 1. get face embdeding
         face_mask, face_emb, sep_pose_mask, sep_face_mask, sep_lip_mask = None, None, None, None, None
+        # only for step 2
         if self.face_analysis:
             for frame in sorted(os.listdir(source_image_path)):
                 try:
@@ -293,12 +294,15 @@ class ImageProcessorForDataProcessing():
                         break
                 except Exception as _:
                     continue
-
+        # only for step 1
         if self.landmarker:
+            print("*\n* ------ Landmark detection ----- *\n*")
             # 3.1 get landmark
             landmarks, height, width = get_landmark_overframes(
                 self.landmarker, source_image_path)
             assert len(landmarks) == len(os.listdir(source_image_path))
+            print(f"For source image path {source_image_path}, total landmarks {len(landmarks)}")
+            print(f" first land marks {landmarks[0]}")
 
             # 3 render face and lip mask
             face_mask = get_union_face_mask(landmarks, height, width)

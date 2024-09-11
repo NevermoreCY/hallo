@@ -53,6 +53,7 @@ class AudioProcessor:
         self.audio_encoder.feature_extractor._freeze_parameters()
         self.only_last_features = only_last_features
 
+        print("\n\n**\n\n\n\n ", audio_separator_model_name , cache_dir, audio_separator_model_path )
         if audio_separator_model_name is not None:
             try:
                 os.makedirs(cache_dir, exist_ok=True)
@@ -65,6 +66,7 @@ class AudioProcessor:
             )
             self.audio_separator.load_model(audio_separator_model_name)
             assert self.audio_separator.model_instance is not None, "Fail to load audio separate model."
+            print("load separate model done")
         else:
             self.audio_separator=None
             print("Use audio directly without vocals seperator.")

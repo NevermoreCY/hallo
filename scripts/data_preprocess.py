@@ -122,6 +122,8 @@ def process_all_videos(input_video_list: List[Path], output_dir: Path, step: int
         output_dir (Path): Directory to save the output.
         gpu_status (bool): Whether to use GPU for processing.
     """
+
+    print("**\n\n process all videos")
     face_analysis_model_path = "pretrained_models/face_analysis"
     landmark_model_path = "pretrained_models/face_analysis/models/face_landmarker_v2_with_blendshapes.task"
     audio_separator_model_file = "pretrained_models/audio_separator/Kim_Vocal_2.onnx"
@@ -158,7 +160,7 @@ def get_video_paths(source_dir: Path, parallelism: int, rank: int) -> List[Path]
         List[Path]: List of video paths to process.
     """
     video_paths = [item for item in sorted(
-        source_dir.iterdir()) if item.is_file() and item.suffix == '.mp4']
+        source_dir.iterdir()) if item.is_file() and (item.suffix == '.mp4' or item.suffix == '.avi' ) ]
     return [video_paths[i] for i in range(len(video_paths)) if i % parallelism == rank]
 
 
@@ -177,6 +179,12 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--rank", default=0, type=int,
                         help="Rank for distributed processing")
 
+    parser.add_argument("-w", "--worker", default=0, type=int,
+                        help="Number of workers for parallel processing")
+
+
+    # python -m scripts.data_preprocess --input_dir E:/bili_data_test_08_22/videos --step 1
+
     args = parser.parse_args()
 
     if args.output_dir is None:
@@ -184,6 +192,8 @@ if __name__ == "__main__":
 
     video_path_list = get_video_paths(
         args.input_dir, args.parallelism, args.rank)
+
+    print(video_path_list)
 
     if not video_path_list:
         logging.warning("No videos to process.")
