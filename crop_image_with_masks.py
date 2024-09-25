@@ -21,6 +21,7 @@ import cv2
 from tqdm import tqdm
 import numpy as np
 import ffmpeg
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -63,14 +64,18 @@ def squre_bbox(height, width,x_min, x_max, y_min, y_max, expand_ratio, shift_up_
     x_len = x_max - x_min
     y_len = y_max - y_min
 
-    shift_up_pad = int( y_len * (shift_up_ratio))
-    expand_pad = int(max(x_len, y_len) * (expand_ratio-1))
 
-    print(expand_pad)
+
+    shift_up_pad = int( y_len * (shift_up_ratio))
+    expand_pad = int(max(x_len, y_len) * (expand_ratio-1) / 2 )
+
+    print("expand_pad = ", expand_pad)
     print("before squre : ", x_len, y_len)
 
     diff = x_len - y_len
+    print("diff : ", diff )
 
+    # try to make it a square (x_len = y_len)
     if diff > 0:
         # case when x is larger than y
         pad_both_side = diff // 2
@@ -85,37 +90,53 @@ def squre_bbox(height, width,x_min, x_max, y_min, y_max, expand_ratio, shift_up_
         if diff % 2 == 1:
             x_max += 1
 
+    print("After padding :", x_min, x_max, y_min, y_max)
+
     # expand
     x_min -= expand_pad
     x_max += expand_pad
     y_min -= expand_pad
     y_max += expand_pad
 
+    print("After expand : ", x_min, x_max, y_min, y_max)
+
     # shift up
     y_min -= shift_up_pad
     y_max -= shift_up_pad
 
+    print("After shift up ")
     print(x_min, x_max, y_min, y_max)
 
+    print("width" ,width , "height", height)
     if x_min < 0:
         x_max -= x_min
         x_min = 0
+    print("1",x_min, x_max, y_min, y_max)
     if y_min < 0:
         y_max -= y_min
         y_min = 0
+    print("2",x_min, x_max, y_min, y_max)
     if x_max > width:
         x_min -= (x_max-width)
         x_max = width
+    print("3",x_min, x_max, y_min, y_max)
     if y_max > height:
         y_min -= (y_max-height)
         y_max = height
+
+    if y_min < 0:
+        y_min = 0
+    if x_min< 0:
+        x_min = 0
+    print("After all ")
+    print(x_min, x_max, y_min, y_max)
 
     x_len = x_max - x_min
     y_len = y_max - y_min
 
     print("after squre : ", x_len, y_len)
 
-    return x_min, x_max, y_min, y_max
+    return int(x_min), int(x_max), int(y_min), int(y_max)
 
 
 def create_video_from_images(image_folder, audio_file, output_video_file, final_path, fps=25):
@@ -123,7 +144,7 @@ def create_video_from_images(image_folder, audio_file, output_video_file, final_
     images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
     images.sort()  # 确保图片按顺序排序
 
-    print(images)
+    # print(images)
 
     # 读取第一张图片以确定视频的宽度和高度
     image_path = os.path.join(image_folder, images[0])
@@ -174,6 +195,11 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--rank", default=0, type=int,
                         help="Rank for distributed processing")
 
+    parser.add_argument("-re", "--repeat", default=1, type=int,
+                        help="For each video , how many times do you want to crop")
+    parser.add_argument("-ra", "--random", default=True, type=bool,
+                        help="whether or not use random expand ratio ")
+
 
     # python corp_image_with_masks.py -i E:/bili_data_test_08_22/videos
     # python -m scripts.data_preprocess --input_dir E:/bili_data_test_08_22/videos --step 1
@@ -188,12 +214,14 @@ if __name__ == "__main__":
     target_height = 512
     expand_ratio = 1.2
     shift_up_ratio = 0.2
-
+    print("\n Random :", args.random)
+    print("\n Repeat :", args.repeat)
     images_dir = os.path.join(args.input_dir , "images")
     images_folders = os.listdir(images_dir)
     print(images_dir)
     print(images_folders)
 
+    meta_datas = {}
 
     for folder in images_folders:
         mask_name = folder+".png"
@@ -219,41 +247,89 @@ if __name__ == "__main__":
             print(mask.shape)
             row_len = mask.shape[0]
             col_len = mask.shape[1]
-
+            print("***\n\n\n DEBUG \n\n\n ", type(x_min))
             print(f"xmin is {x_min}, ymin is {y_min} , xmax is {x_max} , ymax is {y_max}")
+            meta_data = {}
+            meta_data["face_bbox"] = [int(x_min),int(x_max),int(y_min),int(y_max), int(col_len), int(row_len)]
 
-            squared_bbox = squre_bbox(row_len, col_len, x_min, x_max, y_min, y_max, expand_ratio,shift_up_ratio)
-            x_min, x_max, y_min, y_max = squared_bbox
+            repeat_count = args.repeat
+            random = args.random
+
+            longer_side = max(x_max,y_max)
+            max_x_expand_ratio = col_len / longer_side
+            max_y_expand_ratio = row_len / longer_side
+            max_expand_ratio = min(max_x_expand_ratio,max_y_expand_ratio)
+            middle_ratio = (max_expand_ratio -1) /2
+
+            crop_bboxs = []
+            # now we could repeat crop data by at most 2 times
+            for r_id in range(repeat_count):
+                print(f"folder {folder} with r_id {r_id}")
+                if random:
+                    # No repeat, just random corp data once
+                    if repeat_count == 1:
+                        expand_ratio = np.random.uniform(1, max_expand_ratio)
+                    elif repeat_count == 2 and r_id ==0:
+                        expand_ratio = np.random.uniform(1.0, 0.95+ middle_ratio)
+                    elif repeat_count == 2 and r_id == 1:
+                        expand_ratio = np.random.uniform(1.05 + middle_ratio , max_expand_ratio)
+
+                # if we are repeating
+
+                squared_bbox = squre_bbox(row_len, col_len, x_min, x_max, y_min, y_max, expand_ratio,shift_up_ratio)
+                x_min, x_max, y_min, y_max = squared_bbox
+                x_len = x_max - x_min
+                y_len = y_max - y_min
 
 
+                print("***\n\n\n DEBUG \n\n\n ", type(x_min) , type(r_id), type(expand_ratio))
+                crop_bboxs.append([x_min, x_max, y_min, y_max, x_len /col_len, y_len / row_len ,r_id,expand_ratio, max_expand_ratio, middle_ratio])
+                print(crop_bboxs)
+                crop_folder_name = folder +"_"+ str(r_id)
+                image_folder = os.path.join(args.input_dir, "cropped_img", crop_folder_name)
+                os.makedirs(image_folder, exist_ok=True)
+                # for each image, corp with bounding box
+                for image in image_list:
+                    image_path = os.path.join(folder_path , image)
+                    # print(f"image_path is {image_path}")
+                    img = cv2.imread(image_path)
+                    # print(img.shape)
+                    img = img[y_min:y_max, x_min:x_max]
+                    # print(img.shape)
+                    img = cv2.resize(img, (target_width, target_height))
+                    # print(img.shape)
 
-            # for each image, corp with bounding box
-            for image in image_list:
-                image_path = os.path.join(folder_path , image)
-                print(f"image_path is {image_path}")
-                img = cv2.imread(image_path)
-                print(img.shape)
-                img = img[y_min:y_max, x_min:x_max]
-                print(img.shape)
-                img = cv2.resize(img, (target_width, target_height))
-                print(img.shape)
+                    out_path = os.path.join(args.input_dir , "cropped_img", crop_folder_name , image )
+                    # print(out_path)
+                    cv2.imwrite(out_path, img)
 
-                os.makedirs(os.path.join(args.input_dir , "cropped_img", folder ), exist_ok=True)
-                out_path = os.path.join(args.input_dir , "cropped_img", folder , image )
-                print(out_path)
-                cv2.imwrite(os.path.join(args.input_dir , "cropped_img", folder , image ), img)
+                # combine image and audio into a video
+                audio_name = folder+".wav"
+                audio_file = os.path.join(args.input_dir , "audios", audio_name )
+                video_name = folder+"_"+ str(r_id) +".mp4"
+                # video_with_audio = folder + ".mp4"
+                output_video_file = os.path.join(args.input_dir, "cropped_no_aud",video_name)
+                print(f"image folder is {image_folder}, audio file is {audio_file}, output video file is {output_video_file}")
+                output_video_with_audio_file = os.path.join(args.input_dir, "cropped_video",video_name)
 
-            # combine image and audio into a video
-            image_folder = os.path.join(args.input_dir , "cropped_img", folder )
-            audio_name = folder+".wav"
-            audio_file = os.path.join(args.input_dir , "audios", audio_name )
-            video_name = folder+".mp4"
-            # video_with_audio = folder + ".mp4"
-            output_video_file = os.path.join(args.input_dir, "cropped_no_aud",video_name)
-            print(f"image folder is {image_folder}, audio file is {audio_file}, output video file is {output_video_file}")
-            output_video_with_audio_file = os.path.join(args.input_dir, "cropped_video",video_name)
+                create_video_from_images(image_folder, audio_file, output_video_file,output_video_with_audio_file )
 
-            create_video_from_images(image_folder, audio_file, output_video_file,output_video_with_audio_file )
+
+                # check if first bbox is already large enough, if so there is no need to repeat
+                if r_id == 0:
+                    if middle_ratio <= 0.225:
+                        print(f"For file {folder} , First bbox is already large enough, no need to repeat")
+                        break
+            meta_data["crop_bboxs"] = crop_bboxs
+        meta_datas[folder] = meta_data
+
+
+    out_path = os.path.join(args.input_dir , "meta_data.json")
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(meta_datas, f)
+    print("MetaData is saved at %s" % out_path)
+
+
 
 
 
