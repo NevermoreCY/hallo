@@ -330,7 +330,7 @@ if __name__ == "__main__":
                         print(f"For file {folder} , First bbox is already large enough, no need to repeat")
                         break
             meta_data["crop_bboxs"] = crop_bboxs
-        meta_datas[folder] = meta_data
+            meta_datas[folder] = meta_data
 
 
     out_path = os.path.join(args.input_dir , "meta_data.json")
