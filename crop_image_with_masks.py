@@ -166,7 +166,7 @@ def create_video_from_images(image_folder, audio_file, output_video_file, final_
     video_stream = ffmpeg.input(output_video_file)
     audio_stream = ffmpeg.input(audio_file)
     output_stream = ffmpeg.output(video_stream, audio_stream, final_path, vcodec='copy', acodec='aac')
-    output_stream.run()
+    output_stream = ffmpeg.run(output_stream,overwrite_output=True)
     # # 使用 ffmpeg 合并音频和视频
     # (
     #     ffmpeg
