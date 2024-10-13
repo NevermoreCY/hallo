@@ -277,12 +277,12 @@ if __name__ == "__main__":
                 if random:
                     # No repeat, just random corp data once
                     if repeat_count == 1:
-                        expand_ratio = np.random.uniform(1.05, 1 + 0.7*(max_expand_ratio-1))
+                        expand_ratio = np.random.uniform(1.2, 1 + 0.7*(max_expand_ratio-1))
                     elif repeat_count == 2 and r_id ==0:
-                        expand_ratio = np.random.uniform(1.05, 1 + 0.3*(max_expand_ratio-1))
+                        expand_ratio = np.random.uniform(1.2, 1 + 0.35*(max_expand_ratio-1))
                     elif repeat_count == 2 and r_id == 1:
                         expand_ratio = np.random.uniform(1 +  0.4*(max_expand_ratio-1) , 1 + 0.7*(max_expand_ratio-1))
-                    print("\n\nDebug expand:", 1, 1 + 0.3*(max_expand_ratio-1), 1 + 0.4*(max_expand_ratio-1), 1 + 0.7*(max_expand_ratio-1), max_x_expand_ratio)
+                    print("\n\nDebug expand:", 1, 1 + 0.2*(max_expand_ratio-1), 1 + 0.4*(max_expand_ratio-1), 1 + 0.7*(max_expand_ratio-1), max_x_expand_ratio)
                 # if we are repeating
 
                 squared_bbox = squre_bbox(row_len, col_len, x_min, x_max, y_min, y_max, expand_ratio,shift_up_ratio)
